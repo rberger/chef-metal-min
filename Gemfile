@@ -21,5 +21,6 @@ end
 gem 'thor-foodcritic'
 gem 'thor-scmversion'
 
+gem 'chef'
 gem 'chef-metal'
 gem 'chef-metal-docker'

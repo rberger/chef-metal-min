@@ -1,221 +1,112 @@
 # Overview
 
-## Status
+Experiment to figure out how to get chef-metal-docker to start a
+container that acts like a normal instance and persists afer the
+chef-client run.
 
-__UNDER CONSTRUCTION__ _Not yet working fully_
+At this point I can get it to create a container but not to run a
+command.
 
-As of April 24, 2014:
+Its all in `cookbooks/min_app/recipes/min.rb`
 
-* The vagrant version works fine. (but doesn't really do anything)
-* The docker version "succeeds" but doesn' leave a running container
-    * The chef-client run on my workstation completes without error,
-    * Creates the image / container
-    * Runs the chef-client on the container and succeeds.
-    * __BUT__ the container then exits and is no longer available
-
-So I'm trying to figure out how to get the container to stay up and
-act like a vm.
-
-## Chef-Repo for testing chef-metal cluster
-
-This is a base chef repo with an app cookbook `myapp` for trying out
-chef-metal and various chef-metal provisioners. It primiarily will be
-using a real Chef Server and not chef-server mainly because that is my
-use case and is not yet well documented.
-
-This first experiment is trying to use Docker containers to act like
-lightweight VMs so we can simulate a cluster of servers on a laptop.
-This is not the "docker way" but it solves and immediate need until we
-can figure out how to fully utilize docker for compositing services
-into servers.
-
-# Prerequeistes / Assumptions
-
-These are the environment I developed under. YMMV if you don't use the
-same. Probably not all hard and fast but variation increases
-uncertainty.
-
-* Ruby 2.1.1 via rvm
-* Bundler installs all the gems in an rvm gemset
-    * This repo sets a gemset and ruby version use `.ruby-*` files in
-      the root of the repo
-    * Chef 11.12+ installed as gems by bundler
-    * Chef-metal and the provisioneres are installed by bundler
-    * Berkshelf 3.1.1
-* A real Chef Server
-
-# Set things up
-
-## Have a Chef Server
-
-Have some kind of Chef Server running that you can add users,
-cookbooks, nodes, clients etc. to . It can be Hosted/Private
-Enterprise Chef or Open Source Chef Server. These examples were tested
-with Open Source Chef Server.
-
-## Set up this repo to your workstation
-
-We're assuming a Mac. Should work elsewhere but I haven't tested it.
-
-### Clone the repo
-
+I run the command:
 ```
-git clone https://github.com/rberger/chef-metal-playground
+chef-client -z -o min_app::min -l info
 ```
 
-This includes an app cookbook in my_cookbooks. Berkshelf will use this
-directory to get cookbooks that are specific to the playground and
-then get the rest of the cookbooks from the community site or other
-sites as specified in the Berksfile.
-
-### Bundle install
-
+If in min.rb I say:
 ```
-bundle install
+with_provisioner_options 'base_image' => 'ubuntu:precise',  'create_container' => { 'command' =>  'echo "++++++ HELLO ++++"'}
 ```
 
-### Berkshelf install
-
-This will pull in any cookbooks and the `berks vendor cookbooks` will
-copy the cookbooks into the cookbooks directory
+then the chef-client run fails:
 
 ```
-berks install
-berks vendor cookbooks
+Starting Chef Client, version 11.12.2
+[2014-04-25T00:41:20-07:00] INFO: *** Chef 11.12.2 ***
+[2014-04-25T00:41:20-07:00] INFO: Chef-client pid: 60542
+[2014-04-25T00:41:22-07:00] WARN: Run List override has been provided.
+[2014-04-25T00:41:22-07:00] WARN: Original Run List: []
+[2014-04-25T00:41:22-07:00] WARN: Overridden Run List: [recipe[min_app::min]]
+[2014-04-25T00:41:22-07:00] INFO: Run List is [recipe[min_app::min]]
+[2014-04-25T00:41:22-07:00] INFO: Run List expands to [min_app::min]
+[2014-04-25T00:41:22-07:00] INFO: Starting Chef Run for Cymek.local
+[2014-04-25T00:41:22-07:00] INFO: Running start handlers
+[2014-04-25T00:41:22-07:00] INFO: Start handlers complete.
+[2014-04-25T00:41:22-07:00] INFO: HTTP Request Returned 404 Not Found : Object not found: /reports/nodes/Cymek.local/runs
+resolving cookbooks for run list: ["min_app::min"]
+[2014-04-25T00:41:22-07:00] INFO: Loading cookbooks [min_app@0.1.0]
+Synchronizing Cookbooks:
+[2014-04-25T00:41:22-07:00] INFO: Storing updated cookbooks/min_app/recipes/min.rb in the cache.
+  - min_app
+Compiling Cookbooks...
+Converging 2 resources
+Recipe: min_app::min
+  * execute[docker pull ubuntu:precise] action run[2014-04-25T00:41:22-07:00] INFO: Processing execute[docker pull ubuntu:precise] action run (min_app::min line 8)
+[2014-04-25T00:41:38-07:00] INFO: execute[docker pull ubuntu:precise] ran successfully
+
+    - execute docker pull ubuntu:precise
+
+  * machine[min] action create[2014-04-25T00:41:38-07:00] INFO: Processing machine[min] action create (min_app::min line 10)
+[2014-04-25T00:41:38-07:00] INFO: HTTP Request Returned 404 Not Found : Object not found: http://127.0.0.1:8889/nodes/min
+
+    - Delete old, non-running container
+    - Create new container and run container_configuration['Cmd']
+================================================================================
+Error executing action `create` on resource 'machine[min]'
+================================================================================
+
+
+Docker::Error::NotFoundError
+----------------------------
+Expected(200..204) <=> Actual(404 Not Found)
+
+
+Resource Declaration:
+---------------------
+# In /Users/rberger/.chef/local-mode-cache/cache/cookbooks/min_app/recipes/min.rb
+
+ 10: machine 'min' do
+ 11:   action :create
+ 12: end
+ 13:
+
+
+
+Compiled Resource:
+------------------
+# Declared in /Users/rberger/.chef/local-mode-cache/cache/cookbooks/min_app/recipes/min.rb:10:in `from_file'
+
+machine("min") do
+  action [:create]
+  retries 0
+  retry_delay 2
+  guard_interpreter :default
+  chef_server {:chef_server_url=>"http://127.0.0.1:8889", :options=>{:client_name=>"Cymek.local", :signing_key_filename=>nil}}
+  provisioner #<ChefMetalDocker::DockerProvisioner:0x00000102162cd8 @credentials=nil, @connection=#<Docker::Connection:0x00000102162bc0 @url="tcp://localhost:4243", @options={}>>
+  provisioner_options {"base_image"=>"ubuntu:precise", "create_container"=>{"command"=>"echo \"++++++ HELLO ++++\""}}
+  cookbook_name "min_app"
+  recipe_name "min"
+end
+
+
+
+[2014-04-25T00:41:39-07:00] INFO: Running queued delayed notifications before re-raising exception
+
+Running handlers:
+[2014-04-25T00:41:39-07:00] ERROR: Running exception handlers
+Running handlers complete
+
+[2014-04-25T00:41:39-07:00] ERROR: Exception handlers complete
+[2014-04-25T00:41:39-07:00] FATAL: Stacktrace dumped to /Users/rberger/.chef/local-mode-cache/cache/chef-stacktrace.out
+Chef Client failed. 1 resources updated in 19.222564 seconds
+[2014-04-25T00:41:39-07:00] ERROR: machine[min] (min_app::min line 10) had an error: Docker::Error::NotFoundError: Expected(200..204) <=> Actual(404 Not Found)
+[2014-04-25T00:41:40-07:00] FATAL: Chef::Exceptions::ChildConvergeError: Chef run process exited unsuccessfully (exit code 1)
 ```
 
-### Set up your .chef directory in this repo
-
-The existing .chef/knife.rb is set up with the following assumptions.
-Feel free to change for your environment:
-
-* Your chef-server chef-validator and user pem will be in
-  `~/.chef/#{HOSTNAME}/  
-    (This insures that your creds don't end up in your git repo)
-* You need to change the chef_server_url to match your chef servers
-  FQDN or ip address
-* It trys to figure out the username and orgname if appropriate
-
-
-## Set up to run chef-client on your workstation
-
-## Install Docker
-
-* http://docs.docker.io/installation/mac/
-* export DOCKER_HOST=tcp://localhost:4243
-
-## Create an admin client on your chef server
-
-As far as I can tell, if you are running Open Source Chef Server, you
-need to have a client on your chef server that has admin credentials
-since the chef-client run on your workstation will need permission to
-create, modify and destroy nodes and other data on the chef-server.
-
-If you were running Enterprise Chef Server you can have finer control
-of the permissions for the chef-client you run on your workstation.
-
-Make sure you save the private key that gets generated when you create
-the new client on your chef server. You can name it what you want but
-you eill have to put that name into the `/etc/chef/client.rb` we are
-going to create below.
-
-Our example client will be named `rberger_cymek`. Make sure you say it
-has `admin` power when you create it. 
-
-## Set up your `/etc/chef`
-
-We're going to be running `chef-client` on your workstation, not to
-manage your workstation but to bring up the target instances. If you
-do use chef for managing your workstation (i.e. if there already
-exists an `/etc/chef` directory on your workstation) you should not
-follow these instructions or back up your /etc/chef.
-
-There are ways to not depend on /etc/chef (like merge it into knife.rb
-and pass that to the chef-client run with the `-c` flag) for this but
-I didn't want to add that complexitity right now
-
-
-* Create the directory
-
+If I then do a `docker ps -a`:
 ```
-mkdir -p /etc/chef
+CONTAINER ID        IMAGE               COMMAND               CREATED             STATUS                      PORTS               NAMES
+a25732c58640        f1c9c62956ce        chef-client -l info   41 seconds ago      Exited (1) 13 seconds ago                       min
 ```
 
-* Copy creds to `/etc/chef`
-
-Copy the client pem (`rberger_cymek.pem` in our example) you created
-on your chef-server when you created the client with admin permissions
-to /etc/chef. Then change permissions to not allow others to access
-it.
-
-```
-chmod og-rwx /etc/chef/rberger_cymek.pem
-```
-
-* Create the `/etc/chef/client.rb`
-
-This is what I used. You will have to change `rberger_cymek` to
-whatever you called your client on the chef-server and also set the
-proper `chef_server_url`
-
-```
-current_dir = File.dirname(__FILE__)
-user = ENV['OPSCODE_USER'] || ENV['USER']
-base_dir = "#{current_dir}"
-node_name               "rberger_cymek"
-chef_server_url         "https://chef-server.local"
-client_key              "#{base_dir}/rberger_cymek.pem"
-
-checksum_path           "#{base_dir}/checksum"
-file_cache_path         "#{base_dir}/cache"
-file_backup_path        "#{base_dir}/backup"
-cache_options({:path => "#{base_dir}/cache/checksums", :skip_expires => true})
-ssl_verify_mode         :verify_none
-```
-
-
-# Deploying instances with Chef-Metal
-
-One of the great features of Chef-Metal is that you can create
-cookbook for building a cluster of instances (servers) and decouple
-the target infrastructure (provisioner) from the description of how
-the instance (machine) is defined.
-
-The cookbook `myapp` in `my_cookbooks/myappp` is a cluster cookbook.
-
-The goal of the cookbook is to show how to bring up machines with
-chef-metal and an open source chef-server (not chef-zero) and be able
-to target different provisioners by including the appropriate recipe
-in the run list (`vagrant.rb` and `docker.rb` for now).
-
-The first attempt is to get a docker container to come up and stay up
-with ssh enabled.
-
-In  `my_cookbooks/myappp/recipes` there are the following  recipes:
-
-* `my_machines.rb`: The actual machine[s] to build
-* `chefserver.rb`: Specifies chef-server to be used by the instances
-  when they run their local chef-client runs. Should be the first
-  thing in your run_list if you are using a real chef-server (only
-  tested this way and using Open Source Chef Server)
-* `vagrant.rb`: Include this in the run list if you want to target the
-Vagrant provisioner
-* `docker.rb`: Include this in the run list if you want to target the
-  docker provisioner. Right now this also has the command that should
-  be run after the local chef-client run (though right now, Apr 24,
-  2014, its not running that command)
-* `delete_machines.rb`: Will delete the machines (This will probably
-  go away once I figure out how to do this correctly)
-
-## Deploying a server with Vagrant
-
-
-```
-chef-client -o myapp::chefserver,myapp::vagrant,myapp::my_machines -l info
-```
-
-## Deploying a server to Docker
-
-```
-chef-client -o myapp::chefserver,myapp::docker,myapp::my_machines -l info
-```
