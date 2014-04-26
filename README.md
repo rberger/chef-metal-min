@@ -4,109 +4,56 @@ Experiment to figure out how to get chef-metal-docker to start a
 container that acts like a normal instance and persists afer the
 chef-client run.
 
-At this point I can get it to create a container but not to run a
-command.
+So I've been trying to get something that could be used as a complete persistent service and seem to be missing some fundamental concepts. I can't seem to even get chef-metal-docker to create a container and run a command.
 
-Its all in `cookbooks/min_app/recipes/min.rb`
+I set up `chef-zero -H 0.0.0.0` server running on my ubuntu 14.04 workstation instance and uploaded a simple cookbook (https://github.com/rberger/chef-metal-min/cookbooks/min_app and also the apt cookbook)
 
-I run the command:
-```
-chef-client -z -o min_app::min -l info
-```
+I'm using this chef-zero server for both the workstation chef-client runs and the container chef-client runs so as to minimize ip address and routing issues.
 
-If in min.rb I say:
+If I create a provisioner_options in `min_app/recipes/min.rb` of:
 ```
-with_provisioner_options 'base_image' => 'ubuntu:precise',  'create_container' => { 'command' =>  'echo "++++++ HELLO ++++"'}
+with_provisioner_options 'base_image' => 'ubuntu:precise',  'create_container' => { 'command' =>  'ls -l /opt'}
 ```
 
-then the chef-client run fails:
-
+and do a chef-client run on the workstation:
 ```
-Starting Chef Client, version 11.12.2
-[2014-04-25T00:41:20-07:00] INFO: *** Chef 11.12.2 ***
-[2014-04-25T00:41:20-07:00] INFO: Chef-client pid: 60542
-[2014-04-25T00:41:22-07:00] WARN: Run List override has been provided.
-[2014-04-25T00:41:22-07:00] WARN: Original Run List: []
-[2014-04-25T00:41:22-07:00] WARN: Overridden Run List: [recipe[min_app::min]]
-[2014-04-25T00:41:22-07:00] INFO: Run List is [recipe[min_app::min]]
-[2014-04-25T00:41:22-07:00] INFO: Run List expands to [min_app::min]
-[2014-04-25T00:41:22-07:00] INFO: Starting Chef Run for Cymek.local
-[2014-04-25T00:41:22-07:00] INFO: Running start handlers
-[2014-04-25T00:41:22-07:00] INFO: Start handlers complete.
-[2014-04-25T00:41:22-07:00] INFO: HTTP Request Returned 404 Not Found : Object not found: /reports/nodes/Cymek.local/runs
-resolving cookbooks for run list: ["min_app::min"]
-[2014-04-25T00:41:22-07:00] INFO: Loading cookbooks [min_app@0.1.0]
-Synchronizing Cookbooks:
-[2014-04-25T00:41:22-07:00] INFO: Storing updated cookbooks/min_app/recipes/min.rb in the cache.
-  - min_app
-Compiling Cookbooks...
-Converging 2 resources
-Recipe: min_app::min
-  * execute[docker pull ubuntu:precise] action run[2014-04-25T00:41:22-07:00] INFO: Processing execute[docker pull ubuntu:precise] action run (min_app::min line 8)
-[2014-04-25T00:41:38-07:00] INFO: execute[docker pull ubuntu:precise] ran successfully
-
-    - execute docker pull ubuntu:precise
-
-  * machine[min] action create[2014-04-25T00:41:38-07:00] INFO: Processing machine[min] action create (min_app::min line 10)
-[2014-04-25T00:41:38-07:00] INFO: HTTP Request Returned 404 Not Found : Object not found: http://127.0.0.1:8889/nodes/min
-
-    - Delete old, non-running container
-    - Create new container and run container_configuration['Cmd']
-================================================================================
-Error executing action `create` on resource 'machine[min]'
-================================================================================
-
-
-Docker::Error::NotFoundError
-----------------------------
-Expected(200..204) <=> Actual(404 Not Found)
-
-
-Resource Declaration:
----------------------
-# In /Users/rberger/.chef/local-mode-cache/cache/cookbooks/min_app/recipes/min.rb
-
- 10: machine 'min' do
- 11:   action :create
- 12: end
- 13:
-
-
-
-Compiled Resource:
-------------------
-# Declared in /Users/rberger/.chef/local-mode-cache/cache/cookbooks/min_app/recipes/min.rb:10:in `from_file'
-
-machine("min") do
-  action [:create]
-  retries 0
-  retry_delay 2
-  guard_interpreter :default
-  chef_server {:chef_server_url=>"http://127.0.0.1:8889", :options=>{:client_name=>"Cymek.local", :signing_key_filename=>nil}}
-  provisioner #<ChefMetalDocker::DockerProvisioner:0x00000102162cd8 @credentials=nil, @connection=#<Docker::Connection:0x00000102162bc0 @url="tcp://localhost:4243", @options={}>>
-  provisioner_options {"base_image"=>"ubuntu:precise", "create_container"=>{"command"=>"echo \"++++++ HELLO ++++\""}}
-  cookbook_name "min_app"
-  recipe_name "min"
-end
-
-
-
-[2014-04-25T00:41:39-07:00] INFO: Running queued delayed notifications before re-raising exception
-
-Running handlers:
-[2014-04-25T00:41:39-07:00] ERROR: Running exception handlers
-Running handlers complete
-
-[2014-04-25T00:41:39-07:00] ERROR: Exception handlers complete
-[2014-04-25T00:41:39-07:00] FATAL: Stacktrace dumped to /Users/rberger/.chef/local-mode-cache/cache/chef-stacktrace.out
-Chef Client failed. 1 resources updated in 19.222564 seconds
-[2014-04-25T00:41:39-07:00] ERROR: machine[min] (min_app::min line 10) had an error: Docker::Error::NotFoundError: Expected(200..204) <=> Actual(404 Not Found)
-[2014-04-25T00:41:40-07:00] FATAL: Chef::Exceptions::ChildConvergeError: Chef run process exited unsuccessfully (exit code 1)
+chef-client -o min_app::min -l info
 ```
 
-If I then do a `docker ps -a`:
+The chef-client run fails but the container is created and if I start the container again it generates the output:
+
 ```
-CONTAINER ID        IMAGE               COMMAND               CREATED             STATUS                      PORTS               NAMES
-a25732c58640        f1c9c62956ce        chef-client -l info   41 seconds ago      Exited (1) 13 seconds ago                       min
+docker start -i -a 12ee3aafaa9a
+total 0
 ```
 
+Which shows that the container doesn't have chef installed.
+
+If I then set the provisioner to:
+```
+with_provisioner_options 'base_image' => 'ubuntu:precise'
+```
+The chef-client run on my workstation will create the min_image docker image but it has the `chef-client -l info` as the command.  (Not sure why it created those extra containers):
+```
+$ docker ps -a
+CONTAINER ID        IMAGE               COMMAND                CREATED              STATUS              PORTS               NAMES
+5f10d4a7230b        8859b13fbf47        chef-client -l info    About a minute ago   Exit 0                                  min
+0796e0785921        4d4020697ca8        /bin/sh -c #(nop) AD   2 minutes ago        Exit 0                                  hopeful_engelbart
+bab6f286bc43        061845e6cee3        /bin/sh -c #(nop) AD   2 minutes ago        Exit 0                                  hungry_darwin
+35d4161453cf        2644d502c274        /bin/sh -c #(nop) AD   2 minutes ago        Exit 0                                  cocky_pike
+dfb83a23e339        779457a7795b        /bin/sh -c #(nop) AD   2 minutes ago        Exit 0                                  desperate_pike
+```
+If I then change the provisioner to:
+```
+with_provisioner_options 'base_image' => 'min_image:latest',  'create_container' => { 'command' =>  'ls -l /opt'}
+```
+and then run the chef-client on the workstation it all succeeds (the workstation and the container chef-client runs) but it still executes the command `chef-client -l info` and __not__ `ls -l /opt`:
+```
+$ docker ps -a
+CONTAINER ID        IMAGE               COMMAND                CREATED             STATUS              PORTS               NAMES
+bc331b9b81f2        231fbb21f23a        chef-client -l info    18 seconds ago      Exit 0                                  min
+```
+
+So what am I doing wrong? Does anyone have an example of creating a container and confirming that the command is actually executed?
+
+Once I can do that, the next thing would be to know how to make it so the container stays up and runs one or more processes.
